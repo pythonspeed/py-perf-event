@@ -86,20 +86,20 @@ impl Measure {
         })
     }
 
-    fn enable(&self) -> PyResult<()> {
+    fn enable(&mut self) -> PyResult<()> {
         self.group.enable()?;
         Ok(())
     }
 
-    fn disable(&self) -> PyResult<()> {
+    fn disable(&mut self) -> PyResult<()> {
         self.group.disable()?;
         Ok(())
     }
 
-    fn read(&self) -> PyResult<Vec<u64>> {
+    fn read(&mut self) -> PyResult<Vec<u64>> {
         let data = self.group.read()?;
         let mut result = vec![];
-        for counter in self.counters {
+        for counter in &self.counters {
             result.push(data[&counter]);
         }
         Ok(result)
@@ -114,6 +114,6 @@ fn py_perf_event(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<CacheResult>()?;
     m.add_class::<Cache>()?;
     m.add_class::<Hardware>()?;
-    m.add_function(wrap_pyfunction!(start_measuring, m)?)?;
+    m.add_class::<Measure>()?;
     Ok(())
 }
