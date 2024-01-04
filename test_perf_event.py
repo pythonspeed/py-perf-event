@@ -17,4 +17,4 @@ def test_measure():
     [instructions1] = measure([Hardware.INSTRUCTIONS], sum, range(1_000_000))
     [instructions2] = measure([Hardware.INSTRUCTIONS], sum, range(10_000_000))
     assert instructions1 > 1_000_000
-    assert 7 < instructions2 / instructions1 < 15
+    assert 7 < (instructions2 / instructions1) < 15
