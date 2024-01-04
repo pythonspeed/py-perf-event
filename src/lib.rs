@@ -1,10 +1,6 @@
-//! A Python wrapper for perf-event2.
+//! Get CPU performance counters on Linux.
 use perf_event::events;
 use pyo3::prelude::*;
-
-#[derive(Clone)]
-#[pyclass]
-pub struct CacheResult(events::CacheResult);
 
 macro_rules! expose_consts {
     ($klass:ident, $($attr:ident),+) => {
@@ -18,21 +14,26 @@ macro_rules! expose_consts {
     }
 }
 
+#[derive(Clone, Copy)]
+#[pyclass]
+pub struct CacheResult(events::CacheResult);
+
 expose_consts!(CacheResult, ACCESS, MISS);
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 #[pyclass]
 pub struct CacheId(events::CacheId);
 
 expose_consts!(CacheId, L1D, L1I, LL, DTLB, ITLB, BPU, NODE);
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 #[pyclass]
 pub struct CacheOp(events::CacheOp);
 
 expose_consts!(CacheOp, READ, WRITE, PREFETCH);
 
-#[derive(Clone)]
+/// Read a counter covering caches.
+#[derive(Clone, Copy)]
 #[pyclass]
 pub struct Cache {
     which: CacheId,
@@ -50,29 +51,62 @@ impl From<Cache> for events::Cache {
     }
 }
 
-#[derive(Clone)]
+/// Read a counter from the CPU.
+#[derive(Clone, Copy)]
 #[pyclass]
 pub struct Hardware(events::Hardware);
 
 expose_consts!(Hardware, CPU_CYCLES, INSTRUCTIONS, CACHE_REFERENCES, CACHE_MISSES, BRANCH_INSTRUCTIONS, BRANCH_MISSES, BUS_CYCLES, STALLED_CYCLES_FRONTEND, STALLED_CYCLES_BACKEND, REF_CPU_CYCLES);
 
-#[pyfunction]
-fn start_profiling(events: Vec<&PyAny>) -> PyResult<()> {
-    let mut group = perf_event::Group::new()?;
-    for event in events {
-        if let Ok(hw) = event.extract::<Hardware>() {
-            group.add(&perf_event::Builder::new(hw.0))?;
-            continue;
-        }
-        let cache: Cache = event.extract()?;
-        let cache: events::Cache = cache.into();
-        group.add(&perf_event::Builder::new(cache))?;
-    }
-    group.enable()?;
-    Ok(())
+/// Start gathering counter information, given a list of Hardware or Cache
+/// instances.
+#[pyclass]
+struct Measure {
+    counters: Vec<perf_event::Counter>,
+    group: perf_event::Group,
 }
 
-/// A Python module implemented in Rust.
+#[pymethods]
+impl Measure {
+    #[new]
+    fn new(events: Vec<&PyAny>) -> PyResult<Self> {
+        let mut counters = vec![];
+        let mut group = perf_event::Group::new()?;
+        for event in events {
+            if let Ok(hw) = event.extract::<Hardware>() {
+                counters.push(group.add(&perf_event::Builder::new(hw.0))?);
+                continue;
+            }
+            let cache: Cache = event.extract()?;
+            let cache: events::Cache = cache.into();
+            counters.push(group.add(&perf_event::Builder::new(cache))?);
+        }
+        Ok(Self {
+            counters, group
+        })
+    }
+
+    fn enable(&self) -> PyResult<()> {
+        self.group.enable()?;
+        Ok(())
+    }
+
+    fn disable(&self) -> PyResult<()> {
+        self.group.disable()?;
+        Ok(())
+    }
+
+    fn read(&self) -> PyResult<Vec<u64>> {
+        let data = self.group.read()?;
+        let mut result = vec![];
+        for counter in self.counters {
+            result.push(data[&counter]);
+        }
+        Ok(result)
+    }
+}
+
+/// Get CPU performance counters on Linux.
 #[pymodule]
 fn py_perf_event(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<CacheId>()?;
@@ -80,6 +114,6 @@ fn py_perf_event(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<CacheResult>()?;
     m.add_class::<Cache>()?;
     m.add_class::<Hardware>()?;
-    m.add_function(wrap_pyfunction!(start_profiling, m)?)?;
+    m.add_function(wrap_pyfunction!(start_measuring, m)?)?;
     Ok(())
 }
