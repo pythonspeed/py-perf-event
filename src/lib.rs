@@ -1,6 +1,6 @@
 //! Get CPU performance counters on Linux.
 use perf_event::events;
-use pyo3::prelude::*;
+use pyo3::{prelude::*, types::{PyTuple, PyDict}};
 
 macro_rules! expose_consts {
     ($klass:ident, $($attr:ident),+) => {
@@ -106,6 +106,18 @@ impl Measure {
     }
 }
 
+/// Measure the given events for ``callable(*args, **kwargs)``.
+#[pyfunction]
+#[pyo3(signature = (events, callable, *args, **kwargs))]
+fn measure(events: Vec<&PyAny>, callable: &PyAny, args: &PyTuple, kwargs: Option<&PyDict>) -> PyResult<Vec<u64>> {
+    let mut measure = Measure::new(events)?;
+    measure.enable()?;
+    callable.call(args, kwargs)?;
+    let result = measure.read()?;
+    measure.disable()?;
+    Ok(result)
+}
+
 /// Get CPU performance counters on Linux.
 #[pymodule]
 fn py_perf_event(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -115,5 +127,6 @@ fn py_perf_event(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Cache>()?;
     m.add_class::<Hardware>()?;
     m.add_class::<Measure>()?;
+    m.add_function(wrap_pyfunction!(measure, m)?)?;
     Ok(())
 }
