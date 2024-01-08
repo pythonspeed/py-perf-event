@@ -9,7 +9,21 @@ from py_perf_event import (
 )
 
 
-def test_measure():
+def test_measure_class():
+    """
+    The ``Measure`` API allows getting counters for any code.
+    """
+    m = Measure([Hardware.INSTRUCTIONS])
+    m.enable()
+    sum(range(1_000_000))
+    [instructions] = m.read()
+    sum(range(1_000_000))
+    [instructions2] = m.read()
+    m.disable()
+    assert 1.5 < instructions2 / instructions < 2.5
+
+
+def test_measure_function():
     """
     The measure() API allows getting counters for a given callable, which gets
     called with the given arguments.
