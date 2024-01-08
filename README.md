@@ -2,6 +2,8 @@
 
 Or, a minimal wrapper around the [`py-perf-event2` Rust crate](https://docs.rs/perf-event2/latest/perf_event/), using the Linux [`perf`](https://perf.wiki.kernel.org/index.php/Main_Page) subsystem.
 
+To install: `pip install py-perf-event`
+
 ## Example
 
 ```python
