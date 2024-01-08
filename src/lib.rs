@@ -41,6 +41,16 @@ pub struct Cache {
     result: CacheResult,
 }
 
+#[pymethods]
+impl Cache {
+    #[new]
+    fn new(which: CacheId, operation: CacheOp, result: CacheResult) -> Self {
+        Self {
+            which, operation, result
+        }
+    }
+}
+
 impl From<Cache> for events::Cache {
     fn from(value: Cache) -> Self {
         Self {
