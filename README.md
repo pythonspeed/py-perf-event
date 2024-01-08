@@ -14,3 +14,5 @@ print(instructions2)
 assert instructions1 > 1_000_000
 assert 7 < (instructions2 / instructions1) < 15
 ```
+
+See [the tests](https://github.com/pythonspeed/py-perf-event/blob/main/test_perf_event.py) for more examples.
