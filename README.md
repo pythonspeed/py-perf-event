@@ -1,8 +1,8 @@
 # Python interface to CPU counters on Linux
 
-Or, a minimal wrapper around the `py-perf-event2` Rust crate.
+Or, a minimal wrapper around the [`py-perf-event2` Rust crate](https://docs.rs/perf-event2/latest/perf_event/), using the Linux [`perf`](https://perf.wiki.kernel.org/index.php/Main_Page) subsystem.
 
-Example:
+## Example
 
 ```python
 from py_perf_event import measure, Hardware
@@ -14,6 +14,8 @@ print(instructions2)
 assert instructions1 > 1_000_000
 assert 7 < (instructions2 / instructions1) < 15
 ```
+
+## Other usage
 
 See [the tests](https://github.com/pythonspeed/py-perf-event/blob/main/test_perf_event.py) for more examples.
 
