@@ -16,7 +16,8 @@ assert 7 < (instructions2 / instructions1) < 15
 ```
 
 See [the tests](https://github.com/pythonspeed/py-perf-event/blob/main/test_perf_event.py) for more examples.
-Until more docs are available, you can see the underlying Rust libraries docs for the [`Hardware`](https://docs.rs/perf-event2/latest/perf_event/events/struct.Hardware.html) and [`CacheId`](https://docs.rs/perf-event2/latest/perf_event/events/struct.CacheId.html)/[`CacheOp`](https://docs.rs/perf-event2/latest/perf_event/events/struct.CacheOp.html)/[`CacheResult`](https://docs.rs/perf-event2/latest/perf_event/events/struct.CacheResult.html) structs to see what options are exposed.
+
+Until more docs are available, you can use the underlying Rust libraries docs to see what fields are available on the [`Hardware`](https://docs.rs/perf-event2/latest/perf_event/events/struct.Hardware.html) and [`CacheId`](https://docs.rs/perf-event2/latest/perf_event/events/struct.CacheId.html)/[`CacheOp`](https://docs.rs/perf-event2/latest/perf_event/events/struct.CacheOp.html)/[`CacheResult`](https://docs.rs/perf-event2/latest/perf_event/events/struct.CacheResult.html) classes.
 
 ## Changelog
 
