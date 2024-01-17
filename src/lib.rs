@@ -68,6 +68,19 @@ pub struct Hardware(events::Hardware);
 
 expose_consts!(Hardware, CPU_CYCLES, INSTRUCTIONS, CACHE_REFERENCES, CACHE_MISSES, BRANCH_INSTRUCTIONS, BRANCH_MISSES, BUS_CYCLES, STALLED_CYCLES_FRONTEND, STALLED_CYCLES_BACKEND, REF_CPU_CYCLES);
 
+/// A raw, model-specific CPU counter.
+#[derive(Clone, Copy)]
+#[pyclass]
+pub struct Raw(events::Raw);
+
+#[pymethods]
+impl Raw {
+    #[new]
+    fn new(config: u64) -> Self {
+        Raw(events::Raw::new(config))
+    }
+}
+
 /// Start gathering counter information, given a list of Hardware or Cache
 /// instances.
 #[pyclass]
@@ -85,6 +98,10 @@ impl Measure {
         for event in events {
             if let Ok(hw) = event.extract::<Hardware>() {
                 counters.push(group.add(&perf_event::Builder::new(hw.0))?);
+                continue;
+            }
+            if let Ok(raw) = event.extract::<Raw>() {
+                counters.push(group.add(&perf_event::Builder::new(raw.0))?);
                 continue;
             }
             let cache: Cache = event.extract()?;
@@ -136,6 +153,7 @@ fn py_perf_event(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<CacheResult>()?;
     m.add_class::<Cache>()?;
     m.add_class::<Hardware>()?;
+    m.add_class::<Raw>()?;
     m.add_class::<Measure>()?;
     m.add_function(wrap_pyfunction!(measure, m)?)?;
     Ok(())
