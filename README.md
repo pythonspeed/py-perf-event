@@ -25,4 +25,5 @@ Until more docs are available, you can use the underlying Rust libraries docs to
 
 ## Changelog
 
+* **0.2:** Exposed `Raw` events.
 * **0.1:** Initial, very minimal release.
