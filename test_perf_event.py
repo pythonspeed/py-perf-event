@@ -1,3 +1,5 @@
+import numpy as np
+from numba import njit
 from py_perf_event import (
     Measure,
     Hardware,
@@ -5,6 +7,7 @@ from py_perf_event import (
     CacheId,
     CacheOp,
     CacheResult,
+    Raw,
     measure,
 )
 
@@ -57,3 +60,32 @@ def test_cache_ops():
     assert small_misses <= small_reads
     assert large_reads > 1000 * small_reads
     assert (large_misses / large_reads) > 0.2
+
+
+def test_raw():
+    """
+    ``Raw()`` events get measured.
+
+    TODO: This test is model-specific, only tested on i7-12700K.
+    """
+    # SIMD on float64:
+    simd_f64 = [Raw(0x4c7), Raw(0x10c7)]
+
+    f64_data = np.ones((1_000_000,), dtype=np.float64)
+    f32_data = np.ones((1_000_000,), dtype=np.float32)
+
+    @njit
+    def double(arr):
+        result = np.empty(arr.shape, dtype=arr.dtype)
+        # Should auto-vectorize to SIMD;
+        for i in range(len(arr)):
+            result[i] = 2 * arr[i]
+        return result
+
+    double(f64_data)
+    double(f32_data)
+
+    with_f64 = sum(measure(simd_f64, double, f64_data))
+    assert with_f64 > (1_000_000 / 8) * 0.5
+    with_f32 = sum(measure(simd_f64, double, f32_data))
+    assert with_f32 < 100
