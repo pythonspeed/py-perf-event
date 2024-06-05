@@ -31,7 +31,10 @@ jobs:
           python-version: '3.8'
       - name: Run tests
         run: |
-          pip install maturin pytest
+          pip install maturin
+          python3 -m venv ./venv
+          . ./venv/bin/activate
+          pip install pytest
           maturin develop
           pytest tests
  
