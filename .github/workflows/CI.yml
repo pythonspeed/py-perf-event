@@ -33,7 +33,7 @@ jobs:
         run: |
           # Allow any process to access any perf event:
           sudo sysctl -w kernel.perf_event_paranoid=-1
-          perf stat python --help
+          sudo perf stat python --help
           pip install maturin
           python3 -m venv ./venv
           . ./venv/bin/activate
