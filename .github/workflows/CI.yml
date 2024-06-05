@@ -18,13 +18,37 @@ permissions:
   contents: read
 
 jobs:
-  linux:
+  tests:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         target: [x86_64, aarch64]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      - name: Run tests
+        run: |
+          # Allow any process to access any perf event:
+          sudo sysctl -w kernel.perf_event_paranoid=-1
+          sudo perf stat python --help
+          pip install maturin
+          python3 -m venv ./venv
+          . ./venv/bin/activate
+          pip install -r requirements-dev.txt
+          maturin develop
+          pytest
+ 
+  linux:
+    needs: [tests]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
         with:
           python-version: '3.8'
@@ -42,9 +66,10 @@ jobs:
           path: dist
 
   sdist:
+    needs: [tests]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:

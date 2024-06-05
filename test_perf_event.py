@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 from numba import njit
 from py_perf_event import (
@@ -68,6 +69,11 @@ def test_raw():
 
     TODO: This test is model-specific, only tested on i7-12700K.
     """
+    with open("/proc/cpuinfo") as f:
+        model = f.read()
+    if "i7-12700K" not in model:
+        pytest.skip("Wrong CPU model")
+
     # SIMD on float64:
     simd_f64 = [Raw(0x4c7), Raw(0x10c7)]
 
