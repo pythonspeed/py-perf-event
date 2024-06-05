@@ -36,7 +36,7 @@ jobs:
           . ./venv/bin/activate
           pip install pytest
           maturin develop
-          pytest tests
+          pytest
  
   linux:
     needs: [tests]
