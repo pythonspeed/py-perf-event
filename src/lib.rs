@@ -167,7 +167,7 @@ fn measure(
 
 /// Get CPU performance counters on Linux.
 #[pymodule]
-fn py_perf_event(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
+fn _lib(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<CacheId>()?;
     m.add_class::<CacheOp>()?;
     m.add_class::<CacheResult>()?;
