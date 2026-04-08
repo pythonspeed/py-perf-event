@@ -44,4 +44,18 @@ def measure(events, a_callable, *args, **kwargs) -> list[int]:
     return read.measurements
 
 
-__all__ = _re_export
+def measure_until_full_read(events, a_callable, *args, **kwargs) -> list[int]:
+    """
+    Like ``measure``, but retries up to 10 times if ``PartialRead`` is raised.
+    """
+    for i in range(10):
+        try:
+            return measure(events, a_callable, *args, **kwargs)
+        except PartialRead:
+            if i < 9:
+                continue
+            else:
+                raise
+
+
+__all__ = _re_export + ["measure", "measure_until_full_read"]
