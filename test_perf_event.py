@@ -1,5 +1,6 @@
 import numpy as np
 from numba import njit
+import pytest
 from py_perf_event import (
     Measure,
     Hardware,
@@ -9,6 +10,7 @@ from py_perf_event import (
     CacheResult,
     Raw,
     measure,
+    PartialRead,
 )
 
 
@@ -69,7 +71,7 @@ def test_raw():
     TODO: This test is model-specific, only tested on i7-12700K.
     """
     # SIMD on float64:
-    simd_f64 = [Raw(0x4c7), Raw(0x10c7)]
+    simd_f64 = [Raw(0x4C7), Raw(0x10C7)]
 
     f64_data = np.ones((1_000_000,), dtype=np.float64)
     f32_data = np.ones((1_000_000,), dtype=np.float32)
@@ -89,3 +91,37 @@ def test_raw():
     assert with_f64 > (1_000_000 / 8) * 0.5
     with_f32 = sum(measure(simd_f64, double, f32_data))
     assert with_f32 < 100
+
+
+def test_partial_read():
+    """
+    Partial reads result in ``PartialRead`` exception.
+
+    This can happen among other reasons when there are too many measurements
+    requested so the measurement rotates between counters.
+    """
+
+    def spin():
+        for _ in range(1_000_000):
+            pass
+
+    with pytest.raises(PartialRead) as exc:
+        measure(
+            [
+                Hardware.CPU_CYCLES,
+                Hardware.INSTRUCTIONS,
+                Hardware.CACHE_REFERENCES,
+                Hardware.CACHE_MISSES,
+                Hardware.BRANCH_INSTRUCTIONS,
+                Hardware.BRANCH_MISSES,
+                Cache(CacheId.LL, CacheOp.READ, CacheResult.ACCESS),
+                Cache(CacheId.LL, CacheOp.READ, CacheResult.MISS),
+                Cache(CacheId.L1D, CacheOp.READ, CacheResult.ACCESS),
+                Cache(CacheId.L1D, CacheOp.READ, CacheResult.MISS),
+                Cache(CacheId.LL, CacheOp.WRITE, CacheResult.ACCESS),
+                Cache(CacheId.L1D, CacheOp.WRITE, CacheResult.ACCESS),
+            ],
+            spin,
+        )
+
+    assert exc.value.read.time_enabled_ns > exc.value.read.time_running_ns
