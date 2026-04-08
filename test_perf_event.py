@@ -19,9 +19,9 @@ def test_measure_class():
     m = Measure([Hardware.INSTRUCTIONS])
     m.enable()
     sum(range(1_000_000))
-    [instructions] = m.read()
+    [instructions] = m.read().measurements
     sum(range(1_000_000))
-    [instructions2] = m.read()
+    [instructions2] = m.read().measurements
     m.disable()
     assert 1.5 < instructions2 / instructions < 2.5
 

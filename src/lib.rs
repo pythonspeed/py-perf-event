@@ -106,6 +106,17 @@ struct Measure {
     group: perf_event::Group,
 }
 
+/// A set of current measurements.
+#[pyclass]
+struct Read {
+    #[pyo3(get)]
+    time_enabled_ns: u128,
+    #[pyo3(get)]
+    time_running_ns: u128,
+    #[pyo3(get)]
+    measurements: Vec<u64>,
+}
+
 #[pymethods]
 impl Measure {
     #[new]
@@ -138,17 +149,24 @@ impl Measure {
         Ok(())
     }
 
-    fn read(&mut self) -> PyResult<Vec<u64>> {
+    fn read(&mut self) -> PyResult<Read> {
         let data = self.group.read()?;
-        let mut result = vec![];
+        let mut measurements = vec![];
         for counter in &self.counters {
-            result.push(data[&counter]);
+            measurements.push(data[&counter]);
         }
-        Ok(result)
+        Ok(Read {
+            time_enabled_ns: data.time_enabled().unwrap().as_nanos(),
+            time_running_ns: data.time_running().unwrap().as_nanos(),
+            measurements,
+        })
     }
 }
 
 /// Measure the given events for ``callable(*args, **kwargs)``.
+///
+/// Implemented in Rust instead of Python to minimize the overhead that will get
+/// measured.
 #[pyfunction]
 #[pyo3(signature = (events, callable, *args, **kwargs))]
 fn measure(
@@ -156,7 +174,7 @@ fn measure(
     callable: &Bound<PyAny>,
     args: &Bound<PyTuple>,
     kwargs: Option<&Bound<PyDict>>,
-) -> PyResult<Vec<u64>> {
+) -> PyResult<Read> {
     let mut measure = Measure::new(events)?;
     measure.enable()?;
     callable.call(args, kwargs)?;
@@ -175,6 +193,7 @@ fn _lib(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<Hardware>()?;
     m.add_class::<Raw>()?;
     m.add_class::<Measure>()?;
+    m.add_class::<Read>()?;
     m.add_function(wrap_pyfunction!(measure, m)?)?;
     Ok(())
 }

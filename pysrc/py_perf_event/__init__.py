@@ -5,7 +5,6 @@ Access to a subset of Linux's perf_event_open() API covering CPU hardware counte
 from . import _lib
 
 _re_export = [
-    "measure",
     "Cache",
     "CacheId",
     "CacheOp",
@@ -13,8 +12,21 @@ _re_export = [
     "Measure",
     "Hardware",
     "Raw",
+    "Read",
 ]
 for name in _re_export:
     globals()[name] = getattr(_lib, name)
+
+
+def measure(events, a_callable, *args, **kwargs) -> list[int]:
+    """
+    Call a function or other callable with given arguments, measuring the given
+    events, and returning ``list`` with their respective results.
+
+    Will raise ``PartialRead`` if CPU counters will only enabled part of the
+    time.
+    """
+    return _lib.measure(events, a_callable, *args, **kwargs).measurements
+
 
 __all__ = _re_export
