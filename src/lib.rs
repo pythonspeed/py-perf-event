@@ -1,6 +1,9 @@
 //! Get CPU performance counters on Linux.
 use perf_event::events;
-use pyo3::{prelude::*, types::{PyTuple, PyDict}};
+use pyo3::{
+    prelude::*,
+    types::{PyDict, PyTuple},
+};
 
 macro_rules! expose_consts {
     ($klass:ident, $($attr:ident),+) => {
@@ -15,26 +18,26 @@ macro_rules! expose_consts {
 }
 
 #[derive(Clone, Copy)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct CacheResult(events::CacheResult);
 
 expose_consts!(CacheResult, ACCESS, MISS);
 
 #[derive(Clone, Copy)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct CacheId(events::CacheId);
 
 expose_consts!(CacheId, L1D, L1I, LL, DTLB, ITLB, BPU, NODE);
 
 #[derive(Clone, Copy)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct CacheOp(events::CacheOp);
 
 expose_consts!(CacheOp, READ, WRITE, PREFETCH);
 
 /// Read a counter covering caches.
 #[derive(Clone, Copy)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct Cache {
     which: CacheId,
     operation: CacheOp,
@@ -46,7 +49,9 @@ impl Cache {
     #[new]
     fn new(which: CacheId, operation: CacheOp, result: CacheResult) -> Self {
         Self {
-            which, operation, result
+            which,
+            operation,
+            result,
         }
     }
 }
@@ -63,14 +68,26 @@ impl From<Cache> for events::Cache {
 
 /// Read a counter from the CPU.
 #[derive(Clone, Copy)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct Hardware(events::Hardware);
 
-expose_consts!(Hardware, CPU_CYCLES, INSTRUCTIONS, CACHE_REFERENCES, CACHE_MISSES, BRANCH_INSTRUCTIONS, BRANCH_MISSES, BUS_CYCLES, STALLED_CYCLES_FRONTEND, STALLED_CYCLES_BACKEND, REF_CPU_CYCLES);
+expose_consts!(
+    Hardware,
+    CPU_CYCLES,
+    INSTRUCTIONS,
+    CACHE_REFERENCES,
+    CACHE_MISSES,
+    BRANCH_INSTRUCTIONS,
+    BRANCH_MISSES,
+    BUS_CYCLES,
+    STALLED_CYCLES_FRONTEND,
+    STALLED_CYCLES_BACKEND,
+    REF_CPU_CYCLES
+);
 
 /// A raw, model-specific CPU counter.
 #[derive(Clone, Copy)]
-#[pyclass]
+#[pyclass(from_py_object)]
 pub struct Raw(events::Raw);
 
 #[pymethods]
@@ -89,10 +106,21 @@ struct Measure {
     group: perf_event::Group,
 }
 
+/// A set of current measurements.
+#[pyclass]
+struct Read {
+    #[pyo3(get)]
+    time_enabled_ns: u128,
+    #[pyo3(get)]
+    time_running_ns: u128,
+    #[pyo3(get)]
+    measurements: Vec<u64>,
+}
+
 #[pymethods]
 impl Measure {
     #[new]
-    fn new(events: Vec<&PyAny>) -> PyResult<Self> {
+    fn new(events: Vec<Bound<PyAny>>) -> PyResult<Self> {
         let mut counters = vec![];
         let mut group = perf_event::Group::new()?;
         for event in events {
@@ -108,9 +136,7 @@ impl Measure {
             let cache: events::Cache = cache.into();
             counters.push(group.add(&perf_event::Builder::new(cache))?);
         }
-        Ok(Self {
-            counters, group
-        })
+        Ok(Self { counters, group })
     }
 
     fn enable(&mut self) -> PyResult<()> {
@@ -123,20 +149,32 @@ impl Measure {
         Ok(())
     }
 
-    fn read(&mut self) -> PyResult<Vec<u64>> {
+    fn read(&mut self) -> PyResult<Read> {
         let data = self.group.read()?;
-        let mut result = vec![];
+        let mut measurements = vec![];
         for counter in &self.counters {
-            result.push(data[&counter]);
+            measurements.push(data[&counter]);
         }
-        Ok(result)
+        Ok(Read {
+            time_enabled_ns: data.time_enabled().unwrap().as_nanos(),
+            time_running_ns: data.time_running().unwrap().as_nanos(),
+            measurements,
+        })
     }
 }
 
 /// Measure the given events for ``callable(*args, **kwargs)``.
+///
+/// Implemented in Rust instead of Python to minimize the overhead that will get
+/// measured.
 #[pyfunction]
 #[pyo3(signature = (events, callable, *args, **kwargs))]
-fn measure(events: Vec<&PyAny>, callable: &PyAny, args: &PyTuple, kwargs: Option<&PyDict>) -> PyResult<Vec<u64>> {
+fn measure(
+    events: Vec<Bound<PyAny>>,
+    callable: &Bound<PyAny>,
+    args: &Bound<PyTuple>,
+    kwargs: Option<&Bound<PyDict>>,
+) -> PyResult<Read> {
     let mut measure = Measure::new(events)?;
     measure.enable()?;
     callable.call(args, kwargs)?;
@@ -147,7 +185,7 @@ fn measure(events: Vec<&PyAny>, callable: &PyAny, args: &PyTuple, kwargs: Option
 
 /// Get CPU performance counters on Linux.
 #[pymodule]
-fn py_perf_event(_py: Python, m: &PyModule) -> PyResult<()> {
+fn _lib(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<CacheId>()?;
     m.add_class::<CacheOp>()?;
     m.add_class::<CacheResult>()?;
@@ -155,6 +193,7 @@ fn py_perf_event(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Hardware>()?;
     m.add_class::<Raw>()?;
     m.add_class::<Measure>()?;
+    m.add_class::<Read>()?;
     m.add_function(wrap_pyfunction!(measure, m)?)?;
     Ok(())
 }

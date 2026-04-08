@@ -1,5 +1,8 @@
+import time
+
 import numpy as np
 from numba import njit
+import pytest
 from py_perf_event import (
     Measure,
     Hardware,
@@ -9,6 +12,8 @@ from py_perf_event import (
     CacheResult,
     Raw,
     measure,
+    measure_until_full_read,
+    PartialRead,
 )
 
 
@@ -19,9 +24,9 @@ def test_measure_class():
     m = Measure([Hardware.INSTRUCTIONS])
     m.enable()
     sum(range(1_000_000))
-    [instructions] = m.read()
+    [instructions] = m.read().measurements
     sum(range(1_000_000))
-    [instructions2] = m.read()
+    [instructions2] = m.read().measurements
     m.disable()
     assert 1.5 < instructions2 / instructions < 2.5
 
@@ -31,8 +36,12 @@ def test_measure_function():
     The measure() API allows getting counters for a given callable, which gets
     called with the given arguments.
     """
-    [instructions1] = measure([Hardware.INSTRUCTIONS], sum, range(1_000_000))
-    [instructions2] = measure([Hardware.INSTRUCTIONS], sum, range(10_000_000))
+    [instructions1] = measure_until_full_read(
+        [Hardware.INSTRUCTIONS], sum, range(1_000_000)
+    )
+    [instructions2] = measure_until_full_read(
+        [Hardware.INSTRUCTIONS], sum, range(10_000_000)
+    )
     assert instructions1 > 1_000_000
     assert 7 < (instructions2 / instructions1) < 15
 
@@ -53,9 +62,13 @@ def test_cache_ops():
         return result
 
     small_list = list(range(1_000))
-    [small_reads, small_misses] = measure([ll_reads, ll_misses], traverse, small_list)
+    [small_reads, small_misses] = measure_until_full_read(
+        [ll_reads, ll_misses], traverse, small_list
+    )
     large_list = list(range(10_000_000))
-    [large_reads, large_misses] = measure([ll_reads, ll_misses], traverse, large_list)
+    [large_reads, large_misses] = measure_until_full_read(
+        [ll_reads, ll_misses], traverse, large_list
+    )
     assert small_reads < 1000
     assert small_misses <= small_reads
     assert large_reads > 1000 * small_reads
@@ -69,7 +82,7 @@ def test_raw():
     TODO: This test is model-specific, only tested on i7-12700K.
     """
     # SIMD on float64:
-    simd_f64 = [Raw(0x4c7), Raw(0x10c7)]
+    simd_f64 = [Raw(0x4C7), Raw(0x10C7)]
 
     f64_data = np.ones((1_000_000,), dtype=np.float64)
     f32_data = np.ones((1_000_000,), dtype=np.float32)
@@ -85,7 +98,92 @@ def test_raw():
     double(f64_data)
     double(f32_data)
 
-    with_f64 = sum(measure(simd_f64, double, f64_data))
+    with_f64 = sum(measure_until_full_read(simd_f64, double, f64_data))
     assert with_f64 > (1_000_000 / 8) * 0.5
-    with_f32 = sum(measure(simd_f64, double, f32_data))
+    with_f32 = sum(measure_until_full_read(simd_f64, double, f32_data))
     assert with_f32 < 100
+
+
+def spin_and_do_nested_measurements_n_times(max_count: int, counter: list):
+    """
+    For first three calls, do nested perf measurement on same core.  On fourth
+    and later, just spin.
+    """
+
+    def spin():
+        for _ in range(1_000_000):
+            pass
+
+    if len(counter) > max_count:
+        spin()
+    else:
+        counter.append(None)
+        measurer = Measure(
+            [
+                Cache(CacheId.LL, CacheOp.READ, CacheResult.ACCESS),
+                Cache(CacheId.LL, CacheOp.READ, CacheResult.MISS),
+                Cache(CacheId.L1D, CacheOp.READ, CacheResult.ACCESS),
+                Cache(CacheId.L1D, CacheOp.READ, CacheResult.MISS),
+                Cache(CacheId.LL, CacheOp.WRITE, CacheResult.ACCESS),
+                Cache(CacheId.L1D, CacheOp.WRITE, CacheResult.ACCESS),
+            ],
+        )
+        measurer.enable()
+        spin()
+        measurer.disable()
+        return len(counter)
+
+
+spin_and_do_nested_measurements_n_times.other_measurements = [
+    Hardware.CPU_CYCLES,
+    Hardware.INSTRUCTIONS,
+    Hardware.CACHE_REFERENCES,
+    Hardware.CACHE_MISSES,
+    Hardware.BRANCH_INSTRUCTIONS,
+    Hardware.BRANCH_MISSES,
+]
+
+
+def test_partial_read():
+    """
+    Partial reads result in ``PartialRead`` exception.
+
+    This can happen among other reasons when there are too many measurements
+    requested so the measurement rotates between counters, which we take
+    advantage of to trigger this edge case.
+    """
+    with pytest.raises(PartialRead) as exc:
+        measure(
+            spin_and_do_nested_measurements_n_times.other_measurements,
+            spin_and_do_nested_measurements_n_times,
+            3,
+            [],
+        )
+
+    assert exc.value.read.time_enabled_ns > exc.value.read.time_running_ns
+
+
+def test_measure_until_full_read():
+    """
+    ``measure_until_full_read()`` will retry until a full read happens.
+    """
+    # There's a limit on retries:
+    with pytest.raises(PartialRead):
+        measure_until_full_read(
+            spin_and_do_nested_measurements_n_times.other_measurements,
+            spin_and_do_nested_measurements_n_times,
+            30,
+            [],
+        )
+
+    time.sleep(0.5)
+
+    # But if we eventually succeed before limit, no exceptions.
+    results = measure_until_full_read(
+        spin_and_do_nested_measurements_n_times.other_measurements,
+        spin_and_do_nested_measurements_n_times,
+        3,
+        [],
+    )
+    # Didn't do extra measurements so didn't go over the threshold:
+    assert len(results) == 6
