@@ -1,4 +1,5 @@
 //! Get CPU performance counters on Linux.
+
 use perf_event::events;
 use pyo3::{
     prelude::*,
